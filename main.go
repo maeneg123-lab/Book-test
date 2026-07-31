@@ -232,21 +232,21 @@ func main(){
 
     server := NewServer()
 
-    createTableSQL := `
-    CREATE TABLE books_list1 (
-    id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL,
-    author TEXT NOT NULL,
-    year INT,
-    rating DECIMAL(3,2) CHECK (rating >= 0 AND rating <= 5),
-    created_at TIMESTAMP DEFAULT NOW()
-    );`
+    //createTableSQL := `
+    //CREATE TABLE books_list1 (
+    //id SERIAL PRIMARY KEY,
+    //title TEXT NOT NULL,
+    //author TEXT NOT NULL,
+    //year INT,
+    //rating DECIMAL(3,2) CHECK (rating >= 0 AND rating <= 5),
+    //created_at TIMESTAMP DEFAULT NOW()
+    //);`
 
-    _, err := server.db.Exec(createTableSQL)
-    if err != nil {
-        log.Fatal("Ошибка создания таблицы:", err)
-    }
-    fmt.Println("Таблица tasks_list проверена/создана")
+    //_, err := server.db.Exec(createTableSQL)
+    //if err != nil {
+     //   log.Fatal("Ошибка создания таблицы:", err)
+    //}
+   // fmt.Println("Таблица tasks_list проверена/создана")
 
 
     
