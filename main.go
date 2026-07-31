@@ -7,6 +7,9 @@ import (
     "net/http"
     "strconv"
     "time"
+    "os"
+    "log"
+
 
     _ "github.com/lib/pq"
 )
@@ -15,15 +18,21 @@ type Books struct{
     db *sql.DB
 }
 
-func NewServer() *Books{
-    connStr := "user=postgres password=36863686 dbname=work_db sslmode=disable"
-
+func NewServer() *Books {
+    // Сначала пробуем взять строку из окружения
+    connStr := os.Getenv("DATABASE_URL")
+    // Если её нет — используем локальную для разработки
+    if connStr == "" {
+        connStr = "user=postgres password=36863686 dbname=work_db sslmode=disable"
+    }
+    
     db, err := sql.Open("postgres", connStr)
-    if err!=nil{
-        panic(err)
+    if err != nil {
+        log.Fatal(err)
     }
     return &Books{db: db}
 }
+
 
 func (b *Books) saveBooks(title string, author string, year int64, rating float64) error{
     _, err := b.db.Exec("INSERT INTO books_list1 (title, author, year, rating) VALUES ($1,$2,$3,$4)", title, author, year, rating,)
@@ -214,30 +223,31 @@ func (b *Books) getAuthors(w http.ResponseWriter, r *http.Request) {
 
 
 func main(){
-    connStr := "user=postgres password=36863686 dbname=work_db sslmode=disable"
-
-    db, err:= sql.Open("postgres", connStr)
-    if err!=nil{
-        panic(err)
+    // Проверка переменной окружения
+    dbURL := os.Getenv("DATABASE_URL")
+    fmt.Println("DATABASE_URL =", dbURL)
+    if dbURL == "" {
+        log.Fatal("DATABASE_URL не найдена")
     }
-    defer db.Close()
 
-    //createTableSQL := `
-    //CREATE TABLE books_list1 (
-    //id SERIAL PRIMARY KEY,
-    //title TEXT NOT NULL,
-    //author TEXT NOT NULL,
-    //year INT,
-    //rating DECIMAL(3,2) CHECK (rating >= 0 AND rating <= 5),
-    //created_at TIMESTAMP DEFAULT NOW()
-    //);`
+    
 
-    //_, err = db.Exec(createTableSQL)
+    createTableSQL := `
+    CREATE TABLE books_list1 (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    year INT,
+    rating DECIMAL(3,2) CHECK (rating >= 0 AND rating <= 5),
+    created_at TIMESTAMP DEFAULT NOW()
+    );`
 
-    //if err!= nil{
-   //     panic(err)
-    //}
-    //fmt.Println("Таблица 'books_list' создана успешно!")
+    _, err := server.db.Exec(createTableSQL)
+    if err != nil {
+        log.Fatal("Ошибка создания таблицы:", err)
+    }
+    fmt.Println("Таблица tasks_list проверена/создана")
+
 
     server := NewServer()
 
@@ -249,5 +259,11 @@ func main(){
     http.HandleFunc("/get_books", server.get_books)
     http.HandleFunc("/new_book", server.add_book)
     fmt.Println("Сервер запущен на http://localhost:8080")
-    http.ListenAndServe(":8080", nil)
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
+    fmt.Println("Сервер запущен на порту", port)
+    http.ListenAndServe(":"+port, nil)
+
 }
