@@ -65,29 +65,40 @@ func (b *Books) add_book(w http.ResponseWriter, r *http.Request){
     fmt.Fprintf(w, "success")
 }
 
-func (b *Books) get_books(w http.ResponseWriter,r *http.Request){
-    rows, err:= b.db.Query(`
-        SELECT id, title, author, year, rating, created_at FROM books_list1;
-    `)
-    if err!=nil{
-        fmt.Fprintf(w, "error: %v", err)
+func (b *Books) get_books(w http.ResponseWriter, r *http.Request) {
+    rows, err := b.db.Query(`SELECT id, title, author, year, rating, created_at FROM books_list1;`)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
     }
-    fmt.Fprintf(w, "books list: \n")
-    for rows.Next(){
+    defer rows.Close()
+
+    var books []map[string]interface{} // или используй структуру
+    for rows.Next() {
         var id int
-        var title string
-        var author string
+        var title, author string
         var year int
         var rating float64
         var created_at time.Time
 
-        err := rows.Scan(&id, &title, &author, &year,&rating, &created_at)
-        if err!=nil{
+        err := rows.Scan(&id, &title, &author, &year, &rating, &created_at)
+        if err != nil {
             continue
         }
 
-        fmt.Fprintf(w, "id: %d, title: %v, author: %v, year: %d, rating: %.2f,  created_at: %v\n", id, title, author, year,rating, created_at.Format("2006-01-02 15:04:05"))
+        book := map[string]interface{}{
+            "id":         id,
+            "title":      title,
+            "author":     author,
+            "year":       year,
+            "rating":     rating,
+            "created_at": created_at.Format("2006-01-02 15:04:05"),
+        }
+        books = append(books, book)
     }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(books)
 }
 
 func (b *Books) put_book(w http.ResponseWriter,r *http.Request){
