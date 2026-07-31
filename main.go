@@ -230,7 +230,7 @@ func main(){
         log.Fatal("DATABASE_URL не найдена")
     }
 
-    
+    server := NewServer()
 
     createTableSQL := `
     CREATE TABLE books_list1 (
@@ -249,7 +249,7 @@ func main(){
     fmt.Println("Таблица tasks_list проверена/создана")
 
 
-    server := NewServer()
+    
 
     http.HandleFunc("/top_rate", server.get_books_stats)
     http.HandleFunc("/authors", server.getAuthors)
