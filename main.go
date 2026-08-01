@@ -9,10 +9,16 @@ import (
     "time"
     "os"
     "log"
+    "context"
+    "strings"
+    "github.com/golang-jwt/jwt/v5"
+    "golang.org/x/crypto/bcrypt"
 
 
     _ "github.com/lib/pq"
 )
+
+var jwtSecret = []byte("твой_супер_секретный_ключ_123")
 
 type Books struct{
     db *sql.DB
@@ -33,13 +39,49 @@ func NewServer() *Books {
     return &Books{db: db}
 }
 
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        tokenString := r.Header.Get("Authorization")
+        if tokenString == "" {
+            http.Error(w, "Токен не предоставлен", http.StatusUnauthorized)
+            return
+        }
 
-func (b *Books) saveBooks(title string, author string, year int64, rating float64) error{
-    _, err := b.db.Exec("INSERT INTO books_list1 (title, author, year, rating) VALUES ($1,$2,$3,$4)", title, author, year, rating,)
+        // Убираем "Bearer " из строки
+        tokenString = strings.TrimPrefix(tokenString, "Bearer ")
+
+        token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+                return nil, fmt.Errorf("неверный метод подписи")
+            }
+            return jwtSecret, nil
+        })
+
+        if err != nil || !token.Valid {
+            http.Error(w, "Неверный токен", http.StatusUnauthorized)
+            return
+        }
+
+        // Извлекаем user_id из токена и добавляем в контекст запроса
+        if claims, ok := token.Claims.(jwt.MapClaims); ok {
+            userID := int(claims["user_id"].(float64))
+            r = r.WithContext(context.WithValue(r.Context(), "user_id", userID))
+        }
+
+        next(w, r)
+    }
+}
+
+func (b *Books) saveNotes(title string, author string, year int, rating float64, userID int) error {
+    _, err := n.db.Exec(
+        "INSERT INTO book_list1 (title, author, year, rating, user_id) VALUES ($1, $2, $3, $4, $5)",
+        title,author, year, rating, userID,
+    )
     return err
 }
 
 func (b *Books) add_book(w http.ResponseWriter, r *http.Request){
+    
     value := r.URL.Query()
 
     title := value.Get("title")
@@ -66,9 +108,14 @@ func (b *Books) add_book(w http.ResponseWriter, r *http.Request){
 }
 
 func (b *Books) get_books(w http.ResponseWriter,r *http.Request){
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     rows, err:= b.db.Query(`
-        SELECT id, title, author, year, rating, created_at FROM books_list1;
-    `)
+        SELECT id, title, author, year, rating, created_at FROM books_list1 WHERE user_id=$1;
+    `, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
     }
@@ -91,6 +138,11 @@ func (b *Books) get_books(w http.ResponseWriter,r *http.Request){
 }
 
 func (b *Books) put_book(w http.ResponseWriter,r *http.Request){
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     idstr := r.URL.Query().Get("id")
     ratingstr := r.URL.Query().Get("rating")
 
@@ -102,8 +154,8 @@ func (b *Books) put_book(w http.ResponseWriter,r *http.Request){
     }
 
     _, err= b.db.Query(`
-        UPDATE books_list1 SET rating=$1 WHERE id = $2;
-    `, rating, id)
+        UPDATE books_list1 SET rating=$1 WHERE id = $2, user_id=$3;
+    `, rating, id, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
     }
@@ -114,6 +166,11 @@ func (b *Books) put_book(w http.ResponseWriter,r *http.Request){
 
 
 func (b *Books) get_book(w http.ResponseWriter,r *http.Request){
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     idstr := r.URL.Query().Get("id")
     id,err:=strconv.ParseInt(idstr,10,64)
     if err!=nil{
@@ -122,8 +179,8 @@ func (b *Books) get_book(w http.ResponseWriter,r *http.Request){
     }
 
     rows, err:= b.db.Query(`
-        SELECT id, title, author, year, rating, created_at FROM books_list1 WHERE id =$1;
-    `, id)
+        SELECT id, title, author, year, rating, created_at FROM books_list1 WHERE id =$1, user_id =$2;
+    `, id, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
     }
@@ -148,12 +205,16 @@ func (b *Books) get_book(w http.ResponseWriter,r *http.Request){
 }
 
 func (b *Books) get_books_stats(w http.ResponseWriter,r *http.Request){
-
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     rows, err:= b.db.Query(`
-        SELECT * FROM books_list1
+        SELECT * FROM books_list1 WHERE user_id =$1
         ORDER BY rating DESC
         LIMIT 5;
-    `)
+    `, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
     }
@@ -178,6 +239,11 @@ func (b *Books) get_books_stats(w http.ResponseWriter,r *http.Request){
 }
 
 func (b *Books) del_book(w http.ResponseWriter,r *http.Request){
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     idstr := r.URL.Query().Get("id")
     id,err:=strconv.ParseInt(idstr,10,64)
     if err!=nil{
@@ -186,8 +252,8 @@ func (b *Books) del_book(w http.ResponseWriter,r *http.Request){
     }
 
     _, err = b.db.Query(`
-        DELETE FROM books_list1 WHERE id =$1;
-    `, id)
+        DELETE FROM books_list1 WHERE id =$1, user_id=$2;
+    `, id, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
     }
@@ -196,11 +262,16 @@ func (b *Books) del_book(w http.ResponseWriter,r *http.Request){
 }
 
 func (b *Books) getAuthors(w http.ResponseWriter, r *http.Request) {
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     rows, err := b.db.Query(`
         SELECT DISTINCT author
-        FROM books_list1
+        FROM books_list1 WHERE user_id = $1
         ORDER BY author
-    `)
+    `, usesID)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -248,16 +319,38 @@ func main(){
     //}
    // fmt.Println("Таблица tasks_list проверена/создана")
 
+    tableUserCreate:=`
+    CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+    );`
 
+    _, err:= server.db.Exec(tableUserCreate) 
+    if err!= nil{
+        log.Fatal("ошибка создания таблицы user:", err) 
+    }
+    fmt.Println("таблица user  создана") 
+    updateBook := `
+    ALTER TABLE book_list1 ADD COLUMN user_id INT REFERENCES users(id);`
+
+    _, err := server.db.Exec(updateBook) 
+    if err!=nil{
+        log.Fatal("ошибка обновления таблицы: ", err) 
+    }
+    fmt.Println("таблица обновлена") 
+
+  
     
 
-    http.HandleFunc("/top_rate", server.get_books_stats)
-    http.HandleFunc("/authors", server.getAuthors)
-    http.HandleFunc("/get_book", server.get_book)
-    http.HandleFunc("/del_book", server.del_book)
-    http.HandleFunc("/put_book", server.put_book)
-    http.HandleFunc("/get_books", server.get_books)
-    http.HandleFunc("/new_book", server.add_book)
+    http.HandleFunc("/top_rate", authMiddleware(server.get_books_stats)) 
+    http.HandleFunc("/authors", authMiddleware(server.getAuthors)) 
+    http.HandleFunc("/get_book", authMiddleware(server.get_book)) 
+    http.HandleFunc("/del_book", authMiddleware(server.del_book)) 
+    http.HandleFunc("/put_book", authMiddleware(server.put_book)) 
+    http.HandleFunc("/get_books", authMiddlewareserver.get_books)) 
+    http.HandleFunc("/new_book", authMiddleware(server.add_book)) 
     fmt.Println("Сервер запущен на http://localhost:8080")
     port := os.Getenv("PORT")
     if port == "" {
