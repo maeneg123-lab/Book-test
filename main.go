@@ -413,8 +413,8 @@ func main(){
     
 
     http.HandleFunc("/top_rate", authMiddleware(server.get_books_stats)) 
-    http.HandleFunc("/register", server.register)
-    http.HandleFunc("/login", server.login)
+    http.HandleFunc("/register", server.register)  // без middleware
+    http.HandleFunc("/login", server.login)        // без middleware
     http.HandleFunc("/authors", authMiddleware(server.getAuthors)) 
     http.HandleFunc("/get_book", authMiddleware(server.get_book)) 
     http.HandleFunc("/del_book", authMiddleware(server.del_book)) 
