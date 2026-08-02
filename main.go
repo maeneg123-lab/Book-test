@@ -18,7 +18,15 @@ import (
     _ "github.com/lib/pq"
 )
 
-var jwtSecret = []byte("твой_супер_секретный_ключ_123")
+var jwtSecret = []byte("твой_секретный_ключ_для_jwt")
+
+func generateToken(userID int) (string, error) {
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "user_id": userID,
+        "exp":     time.Now().Add(time.Hour * 24).Unix(),
+    })
+    return token.SignedString(jwtSecret)
+}
 
 type Books struct{
     db *sql.DB
@@ -292,6 +300,68 @@ func (b *Books) getAuthors(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(authors)
 }
 
+func (n *Notes) register(w http.ResponseWriter, r *http.Request) {
+    username := r.URL.Query().Get("username")
+    password := r.URL.Query().Get("password")
+
+    if username == "" || password == "" {
+        http.Error(w, "Username and password are required", http.StatusBadRequest)
+        return
+    }
+
+    // Хешируем пароль
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+    if err != nil {
+        http.Error(w, "Error hashing password", http.StatusInternalServerError)
+        return
+    }
+
+    // Сохраняем в БД
+    _, err = n.db.Exec("INSERT INTO users (username, password) VALUES ($1, $2)", username, hashedPassword)
+    if err != nil {
+        http.Error(w, "Username already exists", http.StatusConflict)
+        return
+    }
+
+    fmt.Fprintf(w, "User registered successfully")
+}
+
+func (n *Notes) login(w http.ResponseWriter, r *http.Request) {
+    username := r.URL.Query().Get("username")
+    password := r.URL.Query().Get("password")
+
+    if username == "" || password == "" {
+        http.Error(w, "Username and password are required", http.StatusBadRequest)
+        return
+    }
+
+    // Ищем пользователя в БД
+    var userID int
+    var hashedPassword string
+    err := n.db.QueryRow("SELECT id, password FROM users WHERE username=$1", username).Scan(&userID, &hashedPassword)
+    if err != nil {
+        http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+        return
+    }
+
+    // Проверяем пароль
+    err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+    if err != nil {
+        http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+        return
+    }
+
+    // Генерируем JWT-токен
+    token, err := generateToken(userID)
+    if err != nil {
+        http.Error(w, "Error generating token", http.StatusInternalServerError)
+        return
+    }
+
+    // Отправляем токен в ответе
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
 
 func main(){
     // Проверка переменной окружения
@@ -303,21 +373,19 @@ func main(){
 
     server := NewServer()
 
-    //createTableSQL := `
-    //CREATE TABLE books_list1 (
-    //id SERIAL PRIMARY KEY,
-    //title TEXT NOT NULL,
-    //author TEXT NOT NULL,
-    //year INT,
-    //rating DECIMAL(3,2) CHECK (rating >= 0 AND rating <= 5),
-    //created_at TIMESTAMP DEFAULT NOW()
-    //);`
+    createTableSQL := `
+    CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW() 
+    );`
 
-    //_, err := server.db.Exec(createTableSQL)
-    //if err != nil {
-     //   log.Fatal("Ошибка создания таблицы:", err)
-    //}
-   // fmt.Println("Таблица tasks_list проверена/создана")
+    _, err := server.db.Exec(createTableSQL)
+    if err != nil {
+        log.Fatal("Ошибка создания таблицы:", err)
+    }
+    fmt.Println("Таблица tasks_list проверена/создана")
 
     tableUserCreate:=`
     CREATE TABLE IF NOT EXISTS users (
@@ -345,6 +413,8 @@ func main(){
     
 
     http.HandleFunc("/top_rate", authMiddleware(server.get_books_stats)) 
+    http.HandleFunc("/register", authMiddleware(server.register)) 
+    http.HandleFunc("/login", authMiddleware(server.login)) 
     http.HandleFunc("/authors", authMiddleware(server.getAuthors)) 
     http.HandleFunc("/get_book", authMiddleware(server.get_book)) 
     http.HandleFunc("/del_book", authMiddleware(server.del_book)) 
