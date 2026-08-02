@@ -80,9 +80,9 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
     }
 }
 
-func (b *Books) saveNotes(title string, author string, year int, rating float64, userID int) error {
+func (b *Books) saveBooks(title string, author string, year int, rating float64, userID int) error {
     _, err := n.db.Exec(
-        "INSERT INTO book_list1 (title, author, year, rating, user_id) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO books_list1 (title, author, year, rating, user_id) VALUES ($1, $2, $3, $4, $5)",
         title,author, year, rating, userID,
     )
     return err
@@ -162,7 +162,7 @@ func (b *Books) put_book(w http.ResponseWriter,r *http.Request){
     }
 
     _, err= b.db.Query(`
-        UPDATE books_list1 SET rating=$1 WHERE id = $2, user_id=$3;
+        UPDATE books_list1 SET rating=$1 WHERE id = $2 AND user_id=$3;
     `, rating, id, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
@@ -187,7 +187,7 @@ func (b *Books) get_book(w http.ResponseWriter,r *http.Request){
     }
 
     rows, err:= b.db.Query(`
-        SELECT id, title, author, year, rating, created_at FROM books_list1 WHERE id =$1, user_id =$2;
+        SELECT id, title, author, year, rating, created_at FROM books_list1 WHERE id =$1 AND user_id =$2;
     `, id, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
@@ -260,7 +260,7 @@ func (b *Books) del_book(w http.ResponseWriter,r *http.Request){
     }
 
     _, err = b.db.Query(`
-        DELETE FROM books_list1 WHERE id =$1, user_id=$2;
+        DELETE FROM books_list1 WHERE id =$1 AND user_id=$2;
     `, id, userID)
     if err!=nil{
         fmt.Fprintf(w, "error: %v", err)
@@ -279,7 +279,7 @@ func (b *Books) getAuthors(w http.ResponseWriter, r *http.Request) {
         SELECT DISTINCT author
         FROM books_list1 WHERE user_id = $1
         ORDER BY author
-    `, usesID)
+    `, userID)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -413,13 +413,13 @@ func main(){
     
 
     http.HandleFunc("/top_rate", authMiddleware(server.get_books_stats)) 
-    http.HandleFunc("/register", authMiddleware(server.register)) 
-    http.HandleFunc("/login", authMiddleware(server.login)) 
+    http.HandleFunc("/register", server.register)
+    http.HandleFunc("/login", server.login)
     http.HandleFunc("/authors", authMiddleware(server.getAuthors)) 
     http.HandleFunc("/get_book", authMiddleware(server.get_book)) 
     http.HandleFunc("/del_book", authMiddleware(server.del_book)) 
     http.HandleFunc("/put_book", authMiddleware(server.put_book)) 
-    http.HandleFunc("/get_books", authMiddlewareserver.get_books)) 
+    http.HandleFunc("/get_books", authMiddleware(server.get_books)) 
     http.HandleFunc("/new_book", authMiddleware(server.add_book)) 
     fmt.Println("Сервер запущен на http://localhost:8080")
     port := os.Getenv("PORT")
