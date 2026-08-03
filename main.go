@@ -80,8 +80,8 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
     }
 }
 
-func (b *Books) saveBooks(title string, author string, year int, rating float64, userID int) error {
-    _, err := n.db.Exec(
+func (b *Books) saveBooks(title string, author string, year int64, rating float64, userID int) error {
+    _, err := b.db.Exec(
         "INSERT INTO books_list1 (title, author, year, rating, user_id) VALUES ($1, $2, $3, $4, $5)",
         title,author, year, rating, userID,
     )
@@ -300,7 +300,7 @@ func (b *Books) getAuthors(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(authors)
 }
 
-func (n *Notes) register(w http.ResponseWriter, r *http.Request) {
+func (b *Books) register(w http.ResponseWriter, r *http.Request) {
     username := r.URL.Query().Get("username")
     password := r.URL.Query().Get("password")
 
@@ -326,7 +326,7 @@ func (n *Notes) register(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintf(w, "User registered successfully")
 }
 
-func (n *Notes) login(w http.ResponseWriter, r *http.Request) {
+func (b *Books) login(w http.ResponseWriter, r *http.Request) {
     username := r.URL.Query().Get("username")
     password := r.URL.Query().Get("password")
 
@@ -395,7 +395,7 @@ func main(){
     created_at TIMESTAMP DEFAULT NOW()
     );`
 
-    _, err:= server.db.Exec(tableUserCreate)
+    _, err = server.db.Exec(tableUserCreate)
     if err!= nil{
         log.Fatal("ошибка создания таблицы user:", err)
     }
@@ -403,7 +403,7 @@ func main(){
     updateBook := `
     ALTER TABLE book_list1 ADD COLUMN user_id INT REFERENCES users(id);`
 
-    _, err := server.db.Exec(updateBook)
+    _, err = server.db.Exec(updateBook)
     if err!=nil{
         log.Fatal("ошибка обновления таблицы: ", err)
     }
