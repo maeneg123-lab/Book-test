@@ -405,7 +405,7 @@ func main(){
     }
     fmt.Println("таблица user  создана")
     updateBook := `
-    ALTER TABLE book_list1 ADD COLUMN user_id INT REFERENCES users(id);`
+    ALTER TABLE books_list1 ADD COLUMN user_id INT REFERENCES users(id);`
 
     _, err = server.db.Exec(updateBook)
     if err!=nil{
