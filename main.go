@@ -89,7 +89,11 @@ func (b *Books) saveBooks(title string, author string, year int64, rating float6
 }
 
 func (b *Books) add_book(w http.ResponseWriter, r *http.Request){
-
+    userID, ok := r.Context().Value("user_id").(int)
+    if !ok {
+        http.Error(w, "User not authorized", http.StatusUnauthorized)
+        return
+    }
     value := r.URL.Query()
 
     title := value.Get("title")
@@ -108,7 +112,7 @@ func (b *Books) add_book(w http.ResponseWriter, r *http.Request){
         fmt.Fprintf(w, "rating not float64")
     }
 
-    err = b.saveBooks(title, author, year, rating)
+    err = b.saveBooks(title, author, year, rating, userID)
     if err!=nil{
         fmt.Fprintf(w, "error on save: %v", err)
     }
@@ -317,7 +321,7 @@ func (b *Books) register(w http.ResponseWriter, r *http.Request) {
     }
 
     // Сохраняем в БД
-    _, err = n.db.Exec("INSERT INTO users (username, password) VALUES ($1, $2)", username, hashedPassword)
+    _, err = b.db.Exec("INSERT INTO users (username, password) VALUES ($1, $2)", username, hashedPassword)
     if err != nil {
         http.Error(w, "Username already exists", http.StatusConflict)
         return
@@ -338,7 +342,7 @@ func (b *Books) login(w http.ResponseWriter, r *http.Request) {
     // Ищем пользователя в БД
     var userID int
     var hashedPassword string
-    err := n.db.QueryRow("SELECT id, password FROM users WHERE username=$1", username).Scan(&userID, &hashedPassword)
+    err := b.db.QueryRow("SELECT id, password FROM users WHERE username=$1", username).Scan(&userID, &hashedPassword)
     if err != nil {
         http.Error(w, "Invalid username or password", http.StatusUnauthorized)
         return
